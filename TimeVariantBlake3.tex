@@ -1,0 +1,200 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{fancyhdr}
+
+\title{Time-Differential Blake3 Initialization Vector Generation}
+\author{}
+\date{}
+
+% Set up the header and footer
+\pagestyle{fancy}
+\fancyhf{} % Clears existing header and footer
+\fancyhead[L]{President Harmon, David R.} % Left side header
+\fancyfoot[C]{Copyright 2025 The Mapleseed Inc.} % Centered footer
+
+\begin{document}
+
+\maketitle
+
+\section{Algorithm Definition}
+
+Let $\mathcal{T}$ be the set of system timestamps, and $\mathcal{P}$ be the set of prime numbers. The initialization vector $IV \in \mathbb{F}_{2^{32}}^8$ is generated through the following procedure:
+
+\subsection{Temporal Signature Collection}
+
+For a sequence of timestamps $t_i \in \mathcal{T}$, where $i \in \{1,\ldots,8\}$, define:
+
+\[
+\tau(t_i) = t_i \oplus (\nu_{\text{cpu}} \cdot i)
+\]
+
+where $\nu_{\text{cpu}}$ represents the CPU frequency in Hz.
+
+The composite temporal signature $\sigma_t$ is defined as:
+
+\[
+\sigma_t = \bigoplus_{i=1}^8 \tau(t_i)
+\]
+
+\subsection{Prime Distance Calculation}
+
+For each temporal component, calculate the prime distance function $\delta_p$:
+
+\[
+\delta_p(x) = \min\{p - x \mid p \in \mathcal{P}, p > x\}
+\]
+
+The prime distance vector $\Delta = (\delta_1, \ldots, \delta_8)$ is computed as:
+
+\[
+\delta_i = \delta_p(\sigma_t + i\cdot\omega)
+\]
+
+where $\omega$ is the word size (32 bits).
+
+\subsection{Entropy Mixing Function}
+
+Define the entropy mixing function $\mathcal{E}: \mathbb{F}_{2^{32}} \rightarrow \mathbb{F}_{2^{32}}$:
+
+\[
+\mathcal{E}(x) = x \oplus \text{ROT}_r(x) \oplus \eta
+\]
+
+where:
+\begin{itemize}
+  \item $\text{ROT}_r$ is a right rotation by $r$ bits
+  \item $\eta$ is system-specific entropy
+  \item $r = \lfloor\log_2(x)\rfloor \bmod 32$
+\end{itemize}
+
+\subsection{Initialization Vector Generation}
+
+The final IV components are generated as:
+
+\[
+IV_i = \mathcal{E}(\delta_i) \oplus \mathcal{H}(m_i)
+\]
+
+where:
+\begin{itemize}
+  \item $\mathcal{H}$ is an auxiliary hash function
+  \item $m_i$ represents system memory statistics
+\end{itemize}
+
+\section{Security Properties}
+
+\subsection{Entropy Bounds}
+
+The minimum entropy contribution from each source is bounded by:
+
+\[
+H_{\min}(\tau) \geq \log_2(\nu_{\text{cpu}}) + \log_2(t_{\text{precision}})
+\]
+
+where $t_{\text{precision}}$ is the system's temporal resolution.
+
+\subsection{Prime Distance Security}
+
+The prime distance function provides a minimum security margin $\sigma$ defined as:
+
+\[
+\sigma = \min_{x,y \in \mathbb{F}_{2^{32}}} \{\delta_p(x) - \delta_p(y)\}
+\]
+
+This ensures a minimum differential security of $\sigma$ bits.
+
+\section{Implementation Constraints}
+
+The algorithm must satisfy the following constraints:
+
+\begin{enumerate}
+  \item Temporal Resolution:
+  \[
+  t_{\text{precision}} \leq 10^{-9} \text{ seconds}
+  \]
+  \item Prime Search Boundary:
+  \[
+  \max_{x \in \mathbb{F}_{2^{32}}} \{\delta_p(x)\} \leq 2^{20}
+  \]
+  \item Entropy Pool Size:
+  \[
+  |\eta| \geq 64 \text{ bytes}
+  \]
+\end{enumerate}
+
+\section{Compression Function Integration}
+
+The modified compression function $G'$ incorporating the dynamic IV is defined as:
+
+\[
+G'(h, m, t) = G(h \oplus IV(t), m, t)
+\]
+
+where:
+\begin{itemize}
+  \item $h$ is the input chaining value
+  \item $m$ is the message block
+  \item $t$ is the current timestamp
+  \item $G$ is the original Blake3 compression function
+\end{itemize}
+
+The chaining value update function becomes:
+
+\[
+h_{i+1} = G'(h_i, m_i, t_i)
+\]
+
+\section{Performance Considerations}
+
+The algorithm implements the following optimizations:
+
+\begin{enumerate}
+  \item Prime Cache:
+  \[
+  \mathcal{C}_p = \{(x, \delta_p(x)) \mid x \in \text{recent}(\mathcal{T})\}
+  \]
+  \item IV Generation Rate Limit:
+  \[
+  \text{rate}(IV) \leq \min(\nu_{\text{cpu}}/1000, 10^6 \text{ Hz})
+  \]
+  \item Memory Complexity:
+  \[
+  \mathcal{O}(\log_2(\max(\mathcal{T})) \cdot |\mathcal{C}_p|)
+  \]
+\end{enumerate}
+
+\section{Thread Safety Constraints}
+
+For parallel execution, the following invariant must hold:
+
+\[
+\forall t_1, t_2 \in \mathcal{T}: t_1 \neq t_2 \implies IV(t_1) \neq IV(t_2)
+\]
+
+with probability:
+
+\[
+P(IV(t_1) = IV(t_2)) \leq 2^{-256}
+\]
+
+\section{Error Bounds}
+
+The algorithm maintains the following error bounds:
+
+\begin{enumerate}
+  \item Timing Precision Error:
+  \[
+  \epsilon_t \leq 10^{-9} \text{ seconds}
+  \]
+  \item Prime Distance Error:
+  \[
+  \epsilon_p \leq 2^{-32}
+  \]
+  \item Entropy Pool Depletion:
+  \[
+  P(\text{entropy\_depletion}) \leq 2^{-64}
+  \]
+\end{enumerate}
+
+\end{document}
