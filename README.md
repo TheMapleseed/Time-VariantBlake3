@@ -1,4 +1,4 @@
-# Time-Differential Blake3 Initialization Vector Generation
+# Time-Differential Blake 3 Initialization Vector Generation
 
 **President Harmon, David R.**
 
